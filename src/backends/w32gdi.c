@@ -27,31 +27,59 @@
 
 /**\brief Win32 GDI state info */
 typedef /*@partial@*/ struct {
-	/**\brief HDC context */
-	/*@null@*//*@partial@*/ HDC hDC;
 	/**\brief Saved ramps */
 	/*@null@*//*@partial@*/ WORD *saved_ramps;
 } w32gdi_state_t;
 
 #define GAMMA_RAMP_SIZE  256
 
-static w32gdi_state_t state={NULL,NULL};
+static w32gdi_state_t state={NULL};
 
 static int w32gdi_init(/*@unused@*/int screen_num,/*@unused@*/ int crtc_num)
 {
 	int cmcap;
 
+	int n,i;
+	HDC hdc;
+	DISPLAY_DEVICE dd;
+	n = GetSystemMetrics(SM_CMONITORS);
+	LOG(LOGVERBOSE,_("Found %d monitors."),n);
+	dd.cb = sizeof(dd);
+
+   for (i=0;i<n;i++) {
+      dd.DeviceName  [0] = '\0';
+      dd.DeviceString[0] = '\0';
+      dd.DeviceID    [0] = '\0';
+      dd.DeviceKey   [0] = '\0';
+
+      dd.StateFlags   = 0;
+
+      EnumDisplayDevices(NULL, i, &dd, 0);
+
+      LOG(LOGVERBOSE,_("Screen %d  Flags: %d"), i);
+	  LOG(LOGVERBOSE,_("Flags: %d"), dd.StateFlags);
+      LOG(LOGVERBOSE,_("Name: %s"),  dd.DeviceName);
+      LOG(LOGVERBOSE,_("String: %s"),dd.DeviceString);
+      LOG(LOGVERBOSE,_("ID: %s"),    dd.DeviceID);
+      LOG(LOGVERBOSE,_("Key: %s"),   dd.DeviceKey);
+
+      hdc = CreateDC(NULL, dd.DeviceName, NULL, NULL);
+      LOG(LOGVERBOSE,_("  dims: %dx%d"), GetDeviceCaps(hdc, HORZRES), GetDeviceCaps(hdc, VERTRES));
+      LOG(LOGVERBOSE,_("  colors: %d bits"), GetDeviceCaps(hdc, BITSPIXEL));
+	  cmcap = GetDeviceCaps(hdc, COLORMGMTCAPS);
+	  (void)DeleteDC(hdc);
+   }
+
+
 	/* Open device context */
-	if(state.hDC)
-		(void)ReleaseDC(NULL, state.hDC);
-	state.hDC = GetDC(NULL);
-	if (state.hDC == NULL) {
+	hdc = CreateDC(TEXT("DISPLAY"),NULL,NULL,NULL);
+	if (hdc == NULL) {
 		LOG(LOGERR,_("Unable to open device context."));
 		return RET_FUN_FAILED;
 	}
 
 	/* Check support for gamma ramps */
-	cmcap = GetDeviceCaps(state.hDC, COLORMGMTCAPS);
+	cmcap = GetDeviceCaps(hdc, COLORMGMTCAPS);
 	if (cmcap != CM_GAMMA_RAMP) {
 		LOG(LOGERR,_("Display device does not support gamma ramps."));
 		return RET_FUN_FAILED;
@@ -63,17 +91,17 @@ static int w32gdi_init(/*@unused@*/int screen_num,/*@unused@*/ int crtc_num)
 	state.saved_ramps = malloc(3*GAMMA_RAMP_SIZE*sizeof(WORD));
 	if (state.saved_ramps == NULL) {
 		perror("malloc");
-		(void)ReleaseDC(NULL, state.hDC);
+		(void)DeleteDC(hdc);
 		return RET_FUN_FAILED;
 	}
 
 	/* Save current gamma ramps so we can restore them at program exit */
-	if( !GetDeviceGammaRamp(state.hDC, state.saved_ramps) ){
+	if( !GetDeviceGammaRamp(hdc, state.saved_ramps) ){
 		LOG(LOGERR,_("Unable to save current gamma ramp."));
-		(void)ReleaseDC(NULL, state.hDC);
+		(void)DeleteDC(hdc);
 		return RET_FUN_FAILED;
 	}
-
+	(void)DeleteDC(hdc);
 	return RET_FUN_SUCCESS;
 }
 
@@ -82,21 +110,22 @@ static int w32gdi_free(void)
 	/* Free saved ramps */
 	free(state.saved_ramps);
 
-	/* Release device context */
-	if( state.hDC )
-		(void)ReleaseDC(NULL, state.hDC);
 	return RET_FUN_SUCCESS;
 }
 
 static int w32gdi_restore(void)
 {
+	HDC hdc;
+	hdc = CreateDC(TEXT("DISPLAY"),NULL,NULL,NULL);
 	/* Restore gamma ramps */
-	if( (!state.hDC)||(!state.saved_ramps) ){
+	if( (hdc)||(!state.saved_ramps) ){
 		LOG(LOGERR,_("No device context or ramp."));
+		(void)DeleteDC(hdc);
 		return RET_FUN_FAILED;
 	}
-	if( !SetDeviceGammaRamp(state.hDC, state.saved_ramps) ){
+	if( !SetDeviceGammaRamp(hdc, state.saved_ramps) ){
 		LOG(LOGERR,_("Unable to restore gamma ramps."));
+		(void)DeleteDC(hdc);
 		return RET_FUN_FAILED;
 	}
 	return RET_FUN_SUCCESS;
@@ -104,38 +133,49 @@ static int w32gdi_restore(void)
 
 static int w32gdi_set_temperature(int temp, /*@unused@*/ gamma_s gamma)
 {
+	HDC hdc;
 	gamma_ramp_s ramp=gamma_ramp_fill(GAMMA_RAMP_SIZE,temp);
 
 	/* Set new gamma ramps */
-	if( (!state.hDC)||(!ramp.all) ){
+	hdc = CreateDC(TEXT("DISPLAY"),NULL,NULL,NULL);
+	if( (!hdc)||(!ramp.all) ){
 		LOG(LOGERR,_("No device context or ramp."));
-		return RET_FUN_FAILED;
-	}
-	if( !SetDeviceGammaRamp(state.hDC,ramp.all)) {
-		LOG(LOGERR,_("Unable to set gamma ramps."));
+	    (void)DeleteDC(hdc);
 		return RET_FUN_FAILED;
 	}
 
+	if( !SetDeviceGammaRamp(hdc,ramp.all)) {
+		LOG(LOGERR,_("Unable to set gamma ramps."));
+	    (void)DeleteDC(hdc);
+    }
+
+	(void)DeleteDC(hdc);
 	return RET_FUN_SUCCESS;
 }
 
 static int w32gdi_get_temperature(void){
 	gamma_ramp_s ramp=gamma_get_ramps(GAMMA_RAMP_SIZE);
 	float rb_ratio;
+	HDC hdc;
 	
-	if( (!state.hDC)||(!ramp.all) ){
+	hdc = CreateDC(TEXT("DISPLAY"),NULL,NULL,NULL);
+	if( (!hdc)||(!ramp.all) ){
 		LOG(LOGERR,_("No device context or ramp."));
+		(void)DeleteDC(hdc);
 		return RET_FUN_FAILED;
 	}
 
-	if( !GetDeviceGammaRamp(state.hDC,ramp.all) ){
+	if( !GetDeviceGammaRamp(hdc,ramp.all) ){
 		LOG(LOGERR,_("Unable to get gamma ramps."));
+		(void)DeleteDC(hdc);
 		return RET_FUN_FAILED;
 	}
 	if( (!ramp.r)||(!ramp.b) ){
 		LOG(LOGERR,_("No ramps found."));
+		(void)DeleteDC(hdc);
 		return RET_FUN_FAILED;
 	}
+	(void)DeleteDC(hdc);
 	rb_ratio = (float)ramp.r[255]/(float)ramp.b[255];
 	return gamma_find_temp(rb_ratio);
 }

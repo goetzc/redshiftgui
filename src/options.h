@@ -30,7 +30,7 @@ int opt_get_config_file(/*@out@*/ char buffer[],size_t bufsize);
 
 /**\brief Load default values for all fields.
  */
-void opt_init(void);
+void opt_init(char *exename);
 
 /**\brief Sets the brightness value
  * \param brightness Brightness scale (0.1 - 1)
@@ -88,6 +88,11 @@ int opt_parse_method(char *val);
  */
 int opt_set_oneshot(int onoff);
 
+/**\brief Sets portable mode (Save settings to program folder)
+ * \param onoff set to 1 to enable
+ */
+int opt_set_portable(int onoff);
+
 /**\brief Sets transition speed
  * \param tpersec temperature per second, defaults to 100k/s
  */
@@ -114,7 +119,6 @@ int opt_parse_temperatures(char *val);
  */
 int opt_set_verbose(int val);
 
-#ifdef ENABLE_IUP
 /**\brief Starts GUI minimized.
  * \param val Set to 1 to start minimized
  */
@@ -124,18 +128,6 @@ int opt_set_min(int val);
  * \param val Set to 1 to start disabled
  */
 int opt_set_disabled(int val);
-
-/**\brief Sets the current active icon
- * \param icon String containing filename of new icon, use NULL to set default
- */
-int opt_set_active_icon(const char *icon);
-
-/**\brief Sets the current idle icon
- * \param icon String containing filename of new icon, use NULL to set default
- */
-int opt_set_idle_icon(const char *icon);
-
-#endif
 
 /**\brief Parses temperature map
  * \param map String containing new temperature map.
@@ -166,6 +158,9 @@ gamma_method_t opt_get_method(void);
 /**\brief Retrieves oneshot mode */
 int opt_get_oneshot(void);
 
+/**\brief Retrieves portable mode */
+int opt_get_portable(void);
+
 /**\brief Retrieves transition speed */
 int opt_get_trans_speed(void);
 
@@ -181,19 +176,11 @@ int opt_get_temp_night(void);
 /**\brief Retrieves verbosity level */
 int opt_get_verbosity(void);
 
-#ifdef ENABLE_IUP
 /**\brief Retrieves start minimized status */
 int opt_get_min(void);
 
 /**\brief Retrieves start disabled status */
 int opt_get_disabled(void);
-
-/**\brief Retrieves active icon */
-/*@dependent@*/ char *opt_get_active_icon(void);
-
-/**\brief Retrieves idle icon */
-/*@dependent@*/ char *opt_get_idle_icon(void);
-#endif//ENABLE_IUP
 
 /**\brief Retrieves current temperature map */
 /*@dependent@*/ pair *opt_get_map(/*@out@*/ int *size);

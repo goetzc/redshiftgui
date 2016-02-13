@@ -105,7 +105,9 @@ int gui_about(/*@unused@*/ Ihandle *ih){
 			"SCROLLBAR","VERTICAL",
 			"READONLY","YES",
 			"VALUE",
-			_("Homepage:\nhttp://www.mao-yu.com/projects/redshiftgui/\n\n"
+			_("Homepage:\n"
+				STR(PACKAGE_HOME)
+				"\n\n"
 				"Written by Mao Yu\n"
 				"Redshift GUI is based on Redshift by Jon Lund Steffensen\n"
 				"This program uses IUP and libcURL\n"
@@ -156,7 +158,7 @@ int gui_popup(char *title,char *msg,char *type){
 // Main GUI code
 int iup_gui(int argc, char *argv[]){
 	(void)IupOpen( &argc,&argv );
-	_load_icons(opt_get_active_icon(),opt_get_idle_icon());
+	_load_icons("","");
 	guimain_dialog_init();
 	guigamma_init_timers();
 	if( opt_get_disabled() )

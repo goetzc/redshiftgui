@@ -8,14 +8,14 @@ set(PRO_NAME "RedshiftGUI")
 # Project version
 set(RSG_VERSION_MAJOR 0)
 set(RSG_VERSION_MINOR 2)
-set(RSG_VERSION_PATCH 1)
+set(RSG_VERSION_PATCH 4)
 set(RSG_VERSION
 	"${RSG_VERSION_MAJOR}.${RSG_VERSION_MINOR}.${RSG_VERSION_PATCH}")
 # Project information
 set(RSG_COPYRIGHT "GPL")
 set(RSG_AUTHOR "Mao Yu")
 set(RSG_CONTACT "maoserr@gmail.com")
-set(RSG_HOMEPAGE "http://www.mao-yu.com/projects/redshiftgui/")
+set(RSG_HOMEPAGE "http://maoserr.github.io/projects/redshiftgui/")
 set(RSG_BUGREPORT "http://github.com/maoserr/redshiftgui/issues")
 set(RSG_DESC "Monitor color temperature adjustment tool")
 
@@ -45,8 +45,7 @@ if(UNIX)
 	option(PACKAGE_DEB "Package deb files" false)
 elseif(WIN32)
 	option(ENABLE_WINGDI "Enable win32 GDI at compile time" true)
-	option(ENABLE_GTK "Enable GTK GUI at compile time" false)
-	option(ENABLE_IUP "Enable IUP GUI at compile time" true)
+	option(ENABLE_WINGUI "Enable Windows GUI at compile time" true)
 endif(UNIX)
 
 if( ENABLE_GTK AND ENABLE_IUP )
@@ -101,6 +100,14 @@ APPEND_IF_VAR(RSGNSRC ENABLE_IUP
 		${RSG_SRC_DIR}/gui/iupgui_location.h
 		${RSG_SRC_DIR}/gui/iupgui_main.h
 		${RSG_SRC_DIR}/gui/iupgui_settings.h
+		)
+APPEND_IF_VAR(RSGSRC ENABLE_WINGUI
+		${RSG_SRC_DIR}/gui/win32gui.c
+		${RSG_SRC_DIR}/gui/win32gui_gamma.c
+		)
+APPEND_IF_VAR(RSGNSRC ENABLE_WINGUI
+		${RSG_SRC_DIR}/gui/win32gui.h
+		${RSG_SRC_DIR}/gui/win32gui_gamma.h
 		)
 if(UNIX AND NOT APPLE)
 	APPEND_IF_VAR(RSGSRC ENABLE_RANDR
@@ -167,6 +174,7 @@ if(UNIX)
 		${XLIB_INCLUDE_DIR}
 		)
 	set(RSG_LIBS ${RSG_LIBS}
+		m
 		${GTK2_LIBRARIES}
 		${X11_LIBRARIES}
 		${XCB_LIBRARIES}
@@ -215,10 +223,10 @@ endif(UNIX)
 # Preprocessor definitions
 unset(RSG_DEFINITIONS CACHE)
 set(RSG_DEFS ${RSG_DEFS}
-	PACKAGE=${APP_NAME}
-	PACKAGE_HOME=${RSG_HOMEPAGE}
-	PACKAGE_BUGREPORT=${RSG_BUGREPORT}
-	PACKAGE_VER=${RSG_VERSION}
+	PACKAGE="${APP_NAME}"
+	PACKAGE_HOME="${RSG_HOMEPAGE}"
+	PACKAGE_BUGREPORT="${RSG_BUGREPORT}"
+	PACKAGE_VER="${RSG_VERSION}"
 	)
 CHECK_INCLUDE_FILE(libintl.h ENABLE_NLS)
 CHECK_INCLUDE_FILE(sys/signal.h HAVE_SYS_SIGNAL_H)
@@ -334,9 +342,11 @@ if(UNIX)
 	if(PACKAGE_DEB)
 		set(CPACK_GENERATOR ${CPACK_GENERATOR} DEB)
 	endif(PACKAGE_DEB)
+	set(CPACK_DEBIAN_PACKAGE_MAINTAINER "${RSG_AUTHOR} <${RSG_CONTACT}>")
+	set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Monitor color adjustment tool.")
 	set(CPACK_DEBIAN_PACKAGE_SECTION "util")
 	set(CPACK_DEBIAN_PACKAGE_DESCRIPTION
-		"Monitor color adjustment tool.")
+		"Monitor color adjustment tool. Sets your monitor color temperature based on sun elevation.")
 	if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86_64")
 		set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE amd64)
 	elseif(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "i686")

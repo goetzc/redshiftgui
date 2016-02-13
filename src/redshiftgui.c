@@ -19,6 +19,8 @@
 # include "gui/iupgui.h"
 #elif defined(ENABLE_GTK)
 # include "gui/gtkgui.h"
+#elif defined(ENABLE_WINGUI)
+# include "gui/win32gui.h"
 #endif
 
 // Main program return codes
@@ -57,6 +59,8 @@ static int _parse_options(int argc, char *argv[]){
 		_("Run in console mode (no GUI)."),ARGVAL_NONE);
 	(void)args_addarg("o","oneshot",
 		_("Adjust color and then exit (no GUI)"),ARGVAL_NONE);
+	(void)args_addarg("p","portable",
+		_("Save to executable folder"),ARGVAL_NONE);
 	(void)args_addarg("r","speed",
 		_("<SPEED> Transition speed (default 1000 K/s)"),ARGVAL_STRING);
 	(void)args_addarg("s","screen",
@@ -67,36 +71,36 @@ static int _parse_options(int argc, char *argv[]){
 		_("<LEVEL> Verbosity of output (0 = err/warn, 1 = info, 2 = verbose)"),ARGVAL_STRING);
 	(void)args_addarg(NULL,"map",
 		_("(Advanced) Temperature map"),ARGVAL_STRING);
-#ifdef ENABLE_IUP
 	(void)args_addarg(NULL,"min",
 		_("Start GUI minimized"),ARGVAL_NONE);
 	(void)args_addarg("d","disable",
 		_("Start GUI disabled"),ARGVAL_NONE);
-#endif//ENABLE_IUP
 	(void)args_addarg("h","help",
 		_("Display this help message"),ARGVAL_NONE);
 	if( (args_parse(argc,argv) != ARGRET_OK) ){
 		LOG(LOGERR,_("Error occurred parsing options,"
 					"Check your config file or command line."));
 		return RET_FUN_FAILED;
-	}
-	else{
+	}else{
 		char *val;
 		int err=0;
 		char Config_file[LONGEST_PATH];
 		
+		if( args_check("h")==ARGBOOL_TRUE ){
+			printf(_("RedshiftGUI (%s) help:\n"),PACKAGE_VER);
+			args_print();
+			printf(_("\nReport bugs to %s\n"),PACKAGE_BUGREPORT);
+			return RET_FUN_FAILED;
+		}
+		opt_init(argv[0]);
+		if( (val=args_getnamed("p")) )
+			err = (!opt_set_portable(1) ) || err;
+
 		if( (opt_get_config_file(Config_file,LONGEST_PATH)
 					==RET_FUN_SUCCESS)
 				&& ((args_parsefile(Config_file)) != ARGRET_OK) )
 			LOG(LOGWARN,_("Invalid/empty config: %s"),Config_file);
 
-		opt_init();
-		if( args_check("h")==ARGBOOL_TRUE ){
-			printf(_("RedshiftGUI (%s) help:\n"),STR(PACKAGE_VER));
-			args_print();
-			printf(_("\nReport bugs to %s\n"),STR(PACKAGE_BUGREPORT));
-			return RET_FUN_FAILED;
-		}
 
 		if( (val=args_getnamed("v")) )
 			err = (opt_set_verbose(atoi(val))==RET_FUN_FAILED) 
@@ -121,12 +125,10 @@ static int _parse_options(int argc, char *argv[]){
 			err = (!opt_set_screen(atoi(val))) || err;
 		if( (val=args_getnamed("t")) )
 			err = (!opt_parse_temperatures(val)) || err;
-#ifdef ENABLE_IUP
 		if( (val=args_getnamed("min")) )
 			err = (!opt_set_min(1)) || err;
 		if( (val=args_getnamed("d")) )
 			err = (!opt_set_disabled(1)) || err;
-#endif//ENABLE_IUP
 		if( (val=args_getnamed("map")) )
 			err = (!opt_parse_map(val)) || err;
 		if( err ){
@@ -134,6 +136,9 @@ static int _parse_options(int argc, char *argv[]){
 		}
 		if( args_unknown() ){
 			printf(_("Unknown arguments encountered.\n"));
+			printf(_("RedshiftGUI (%s) help:\n"),PACKAGE_VER);
+			args_print();
+			printf(_("\nReport bugs to %s\n"),PACKAGE_BUGREPORT);
 			return RET_FUN_FAILED;
 		}
 	}
@@ -326,6 +331,8 @@ int main(int argc, char *argv[]){
 	ret = iup_gui(argc,argv);
 #elif defined(ENABLE_GTK)
 	ret = gtk_gui(argc,argv);
+#elif defined(ENABLE_WINGUI)
+	ret = win32_gui(argc,argv);
 #else
 		LOG(LOGVERBOSE,_("No GUI toolkit compiled in."));
 		ret = RET_FUN_FAILED;

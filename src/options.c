@@ -3,6 +3,9 @@
 #include "options.h"
 #include "solar.h"
 #include "gamma_vals.h"
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <locale.h>
 #define SIZEOF(X) (sizeof(X)/sizeof(X[0]))
 
 /**\brief Redshift options.*/
@@ -29,24 +32,22 @@ typedef struct{
 	int trans_speed;
 	/**\brief Oneshot mode enabled? */
 	int one_shot;
+	/**\brief Portable mode */
+	int portable;
 	/**\brief Console mode enabled? */
 	int nogui;
 	/**\brief Verbosity level */
 	int verbose;
-#ifdef ENABLE_IUP
 	/**\brief Start GUI minimized */
 	int startmin;
 	/**\brief Start GUI disabled */
 	int startdisabled;
-	/**\brief Active icon */
-	/*@unique@*/ char active_icon[LONGEST_PATH];
-	/**\brief Idle icon */
-	/*@unique@*/ char idle_icon[LONGEST_PATH];
-#endif//ENABLE_IUP
 	/**\brief Temperature map (Advanced) */
 	/*@null@*//*@partial@*//*@owned@*/ pair *map;
 	/**\brief Temperature map size (Advanced) */
 	int map_size;
+	/**\brief Folder for options */
+	char exepath[LONGEST_PATH];
 } rs_opts;
 
 static rs_opts Rs_opts;
@@ -57,21 +58,33 @@ static pair default_map[]={
 	{-174.0,0},
 };
 
+// Checks to see if config file exists in directory
+static int _config_exist(char *basedir){
+
+	return RET_FUN_FAILED;
+}
+
 /* Retrieves configuration file full path */
 int opt_get_config_file(char buffer[],size_t bufsize){
-#ifndef _WIN32
-		char *home = getenv("HOME");
-#else
-		char *home = getenv("APPDATA");
-#endif
+		char *configdir;
 		size_t s_home;
-		if( home==NULL ){
+
+		if( opt_get_portable() ){
+			configdir = Rs_opts.exepath ;
+		}else{
+#ifndef _WIN32
+			configdir = getenv("HOME");
+#else
+			configdir = getenv("APPDATA");
+#endif
+		}
+		if( configdir==NULL ){
 			strcpy(buffer,"None");
 			return RET_FUN_FAILED;
 		}
-		s_home = strlen(home);
+		s_home = strlen(configdir);
 		if( s_home < (bufsize+strlen(RSG_RCFILE)-5) ){
-			strcpy(buffer,home);
+			strcpy(buffer,configdir);
 			buffer[s_home++]=PATH_SEP;
 			strcpy(buffer+s_home,RSG_RCFILE);
 			return RET_FUN_SUCCESS;
@@ -81,9 +94,10 @@ int opt_get_config_file(char buffer[],size_t bufsize){
 }
 
 // Load defaults
-void opt_init(void){
-	if( Rs_opts.map!=NULL )
-		free(Rs_opts.map);
+void opt_init(char *exename){
+	struct stat buffer;   
+	char *sep = strrchr(exename,PATH_SEP);
+	char pathbuffer[LONGEST_PATH];
 	Rs_opts.map=NULL;
 	(void)opt_set_verbose(0);
 	(void)opt_set_brightness(1.0);
@@ -96,12 +110,20 @@ void opt_init(void){
 	(void)opt_set_transpeed(1000);
 	(void)opt_set_oneshot(0);
 	(void)opt_set_nogui(0);
-#ifdef ENABLE_IUP
+	if(sep && (sep<(exename+LONGEST_PATH-10))){
+		strncpy(Rs_opts.exepath,exename,sep-exename+1);
+	}else{
+		Rs_opts.exepath[0]='.';
+		Rs_opts.exepath[1]=PATH_SEP;
+		Rs_opts.exepath[2]='\0';
+	}
+	strcpy(pathbuffer,Rs_opts.exepath);
+	strcpy(pathbuffer+strlen(pathbuffer),RSG_RCFILE);
+	if(stat (pathbuffer, &buffer) == 0){
+		opt_set_portable(1);
+	}
 	(void)opt_set_min(0);
 	(void)opt_set_disabled(0);
-	(void)opt_set_active_icon("");
-	(void)opt_set_idle_icon("");
-#endif//ENABLE_IUP
 }
 
 // Sets brightness
@@ -227,6 +249,12 @@ int opt_set_oneshot(int onoff){
 	return RET_FUN_SUCCESS;
 }
 
+// Set portable mode
+int opt_set_portable(int onoff){
+	Rs_opts.portable = onoff;
+	return RET_FUN_SUCCESS;
+}
+
 // Sets transition - change in temperature per second
 int opt_set_transpeed(int tpersec){
 	Rs_opts.trans_speed = tpersec;
@@ -267,7 +295,6 @@ int opt_set_verbose(int level){
 	return RET_FUN_SUCCESS;
 }
 
-#ifdef ENABLE_IUP
 // Sets start minimized
 int opt_set_min(int val){
 	Rs_opts.startmin = val;
@@ -279,30 +306,6 @@ int opt_set_disabled(int val){
 	Rs_opts.startdisabled = val;
 	return RET_FUN_SUCCESS;
 }
-
-// Sets active icon
-int opt_set_active_icon(const char *icon){
-	if(icon==NULL){
-		strncpy(Rs_opts.active_icon,_(""),LONGEST_PATH-1);
-		return RET_FUN_SUCCESS;
-	}
-	strncpy(Rs_opts.active_icon,icon,LONGEST_PATH-1);
-	Rs_opts.active_icon[LONGEST_PATH-1]='\0';
-	return RET_FUN_SUCCESS;
-}
-
-// Sets idle icon
-int opt_set_idle_icon(const char *icon){
-	if(icon==NULL){
-		strncpy(Rs_opts.active_icon,_(""),LONGEST_PATH-1);
-		return RET_FUN_SUCCESS;
-	}
-	strncpy(Rs_opts.active_icon,icon,LONGEST_PATH-1);
-	Rs_opts.active_icon[LONGEST_PATH-1]='\0';
-	return RET_FUN_SUCCESS;
-}
-
-#endif//ENABLE_IUP
 
 // Parse temperature map
 int opt_parse_map(char *map){
@@ -328,10 +331,10 @@ int opt_parse_map(char *map){
 		return RET_FUN_FAILED;
 	}
 	currstr=map;
+	setlocale(LC_NUMERIC,"");
 	for( i=0; i<cnt; ++i ){
-		currsep=strchr(currstr,',');
 		currend=strchr(currstr,';');
-		curr_map[i].elev=atof(currstr);
+		curr_map[i].elev=strtod(currstr,&currsep);
 		curr_map[i].temp=atof(++currsep);
 		if( curr_map[i].elev > prevelev ){
 			free(curr_map);
@@ -381,6 +384,9 @@ gamma_method_t opt_get_method(void)
 int opt_get_oneshot(void)
 {return Rs_opts.one_shot;}
 
+int opt_get_portable(void)
+{return Rs_opts.portable;}
+
 int opt_get_trans_speed(void)
 {return Rs_opts.trans_speed;}
 
@@ -396,19 +402,11 @@ int opt_get_temp_night(void)
 int opt_get_verbosity(void)
 {return Rs_opts.verbose;}
 
-#ifdef ENABLE_IUP
 int opt_get_min(void)
 {return Rs_opts.startmin;}
 
 int opt_get_disabled(void)
 {return Rs_opts.startdisabled;}
-
-char *opt_get_active_icon(void)
-{return Rs_opts.active_icon;}
-
-char *opt_get_idle_icon(void)
-{return Rs_opts.idle_icon;}
-#endif//ENABLE_IUP
 
 pair *opt_get_map(int *size){
 	if( !Rs_opts.map ){
@@ -448,7 +446,7 @@ void opt_write_config(void){
 		int i;
 		fprintf(fid_config,"map=");
 		for( i=0; i<Rs_opts.map_size; ++i )
-			fprintf(fid_config,"%.2f,%.2f;",Rs_opts.map[i].elev,Rs_opts.map[i].temp);
+			fprintf(fid_config,"%.2f|%.2f;",Rs_opts.map[i].elev,Rs_opts.map[i].temp);
 		fprintf(fid_config,"\n");
 	}
 	(void)fclose(fid_config);
